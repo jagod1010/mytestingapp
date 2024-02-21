@@ -17,7 +17,7 @@ server = app.server
 
 # Define the layout of the app
 app.layout = html.Div([
-    html.H1('Simple Table Display'),
+    html.H1('Table Display'),
     dcc.Graph(
         id='table',
         figure={
@@ -38,4 +38,4 @@ app.layout = html.Div([
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=True,port=8071)
