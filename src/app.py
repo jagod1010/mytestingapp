@@ -1,41 +1,47 @@
 import dash
-from dash import dcc, html
-import pandas as pd
-
-# Sample data
-data = {
-    'Name': ['John', 'Alice', 'Bob', 'Carol'],
-    'Age': [25, 30, 35, 40],
-    'City': ['New York', 'Los Angeles', 'Chicago', 'Houston']
-}
-
-df = pd.DataFrame(data)
+from dash import html, dcc
+from dash.dependencies import Input, Output
+from firebase import firebase
+import dash_table
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
-server = app.server
+
+# Initialize Firebase with your Firebase project credentials
+firebase = firebase.FirebaseApplication('https://central-hub-7fe3e-default-rtdb.firebaseio.com/', None)
 
 # Define the layout of the app
 app.layout = html.Div([
-    html.H1('Table Display'),
-    dcc.Graph(
+    html.H1('Live Data Table'),
+    dash_table.DataTable(
         id='table',
-        figure={
-            'data': [
-                {
-                    'type': 'table',
-                    'header': {
-                        'values': df.columns
-                    },
-                    'cells': {
-                        'values': df.values.tolist(),
-                    }
-                }
-            ]
-        }
+        columns=[
+            {'name': 'Timestamp', 'id': 'timestamp'},
+            {'name': 'Value', 'id': 'value'}
+        ],
+        page_size=10
+    ),
+    dcc.Interval(
+        id='interval-component',
+        interval=5000,  # Update data every 5 seconds
+        n_intervals=0
     )
 ])
 
+# Define callback to update table data
+@app.callback(
+    Output('table', 'data'),
+    [Input('interval-component', 'n_intervals')]
+)
+def update_table(n):
+    # Fetch data from Firebase
+    data = firebase.get('/lora_data', None)
+
+    # Process fetched data and format it for the table
+    table_data = [{'timestamp': entry['timestamp'], 'value': entry['value']} for entry in data.values()]
+
+    return table_data
+
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True,port=8071)
+    app.run_server(debug=True)
