@@ -6,6 +6,7 @@ import dash_table
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
+server = app.server
 
 # Initialize Firebase with your Firebase project credentials
 firebase = firebase.FirebaseApplication('https://central-hub-7fe3e-default-rtdb.firebaseio.com/', None)
