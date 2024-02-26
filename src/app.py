@@ -91,6 +91,41 @@ def update_fire_severity_graph(n):
     return fig
 
 
+@app.callback(
+    Output('latest-info', 'children'),
+    [Input('interval-component', 'n_intervals')]
+)
+def update_info_boxes(n_intervals):
+    # Fetch the latest data point from Firebase
+    data_graph = firebase.get('/lora_data', None)
+
+    # If data_graph is not sorted, you might need to sort it or get the last entry if it's already sorted
+    # Assuming it's sorted with the latest entry last for this example
+    if data_graph:
+        # Get the latest entry
+        latest_entry = list(data_graph.values())[-1]
+        value_components = latest_entry['value'].split(', ')
+        timestamp = datetime.datetime.fromtimestamp(latest_entry['timestamp'])
+        avg_temperature_str = value_components[2].split(':')[1]
+        fire_severity_str = value_components[4].split(':')[1]
+
+        # Format the values
+        latest_timestamp = timestamp.strftime('%Y-%m-%d %I:%M:%S %p')
+        latest_avg_temp = f"Latest Avg Temp: {avg_temperature_str.strip()}"  # Remove spaces and add Celsius °C
+        latest_fire_severity = f"Latest Fire Severity: {fire_severity_str.strip()}"  # Remove spaces and add percentage
+
+        # Concatenate the statistics into a single string
+        latest_info = f"{latest_timestamp}, {latest_avg_temp}, {latest_fire_severity}"
+
+        # Define the font size for the latest-info content
+        font_size = '24px'
+
+        return html.P(latest_info, id="latest-info-content", style={'font-size': font_size, 'text-align': 'center'})
+    else:
+        # Return some default values if there's no data
+        return "No data"
+
+
 # Define a function to generate badges based on node status
 def generate_node_status_content(nodes_status):
     return html.Ul([
@@ -137,9 +172,23 @@ def generate_table():
 tab1_content = dbc.Card(
     dbc.CardBody(
         [
+
             html.H2("Overall System Status:"),
             generate_node_status_content(nodes_status),
-
+            html.H2("Latest Information:", className="card-title",
+                    style={"width": "50%", "height": "500px", "position": "absolute", "top": "200px",
+                           "right": "0px"}, ),
+            dbc.Card(
+                id='latest-info',
+                children=[
+                    dbc.CardBody([
+                        html.P("No data", id="latest-info-content",style={'font-size': '50px'})
+                    ])
+                ],
+                color="dark",
+                style={"width": "50%", "height": "50px", "position": "absolute", "top": "250px", "right": "0px"},
+                inverse=True
+            ),
             html.H2("Central Hub Collected Data:", style={'position': 'absolute', 'top': '200px', 'left': '10px'}),
             generate_table(),
             dcc.Graph(
@@ -152,7 +201,6 @@ tab1_content = dbc.Card(
     className="mt-3",
 )
 
-# Update tab2_content to include badges for node status
 tab2_content = dbc.Card(
     dbc.CardBody(
         [
