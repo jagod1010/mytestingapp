@@ -13,6 +13,7 @@ import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import ThemeSwitchAIO
 import plotly.express as px
 import plotly.graph_objs as go
+import pytz
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -20,6 +21,9 @@ server = app.server
 
 # Initialize Firebase with your Firebase project credentials
 firebase = firebase.FirebaseApplication('https://central-hub-7fe3e-default-rtdb.firebaseio.com/', None)
+
+# Define the desired time zone
+desired_timezone = pytz.timezone('America/New_York')  # For example, 'America/New_York'
 
 # Define column definitions for dash_ag_grid
 columnDefs = [
@@ -57,7 +61,7 @@ def update_fire_severity_graph(n):
 
     for key, entry in data_graph.items():
         value_components = entry['value'].split(', ')
-        timestamp = datetime.datetime.fromtimestamp(entry['timestamp'])
+        timestamp = datetime.datetime.fromtimestamp(entry['timestamp'], tz=pytz.timezone('America/New_York'))
         avg_temperature_str = value_components[2].split(':')[1]
         fire_severity_str = value_components[4].split(':')[1]
 
@@ -105,7 +109,7 @@ def update_info_boxes(n_intervals):
         # Get the latest entry
         latest_entry = list(data_graph.values())[-1]
         value_components = latest_entry['value'].split(', ')
-        timestamp = datetime.datetime.fromtimestamp(latest_entry['timestamp'])
+        timestamp = datetime.datetime.fromtimestamp(latest_entry['timestamp'], tz=pytz.timezone('America/New_York'))
         avg_temperature_str = value_components[2].split(':')[1]
         fire_severity_str = value_components[4].split(':')[1]
 
@@ -241,7 +245,7 @@ def update_table(n):
     for key, entry in data.items():
         value_components = entry['value'].split(', ')
         timestamp = entry['timestamp']
-        timestamp = datetime.datetime.fromtimestamp(timestamp)
+        timestamp = datetime.datetime.fromtimestamp(timestamp, tz=pytz.timezone('America/New_York'))
         timestamp_with_suffix = timestamp.strftime('%Y-%m-%d %I:%M:%S %p')
         avg_temperature = value_components[2].split(':')[1]
         compass = value_components[1].split(':')[1]
