@@ -9,6 +9,7 @@ from dash_bootstrap_templates import ThemeSwitchAIO
 import plotly.graph_objs as go
 import pytz
 
+
 # Initialize the Dash app
 app = dash.Dash(__name__)
 server = app.server
@@ -138,12 +139,16 @@ def update_info_box(n_intervals):
 
 def getting_node_info():
     data_node = firebase.get('/lora_data', None)
-
+    node_one = node_two = central_hub = "Unknown"  # Default values in case data is not available
     for key, entry in data_node.items():
         value_components = entry['value'].split(', ')
-        node_one = value_components[5].split(':')[1]
-        node_two = value_components[6].split(':')[1]
-        central_hub = value_components[7].split(':')[1]
+        for component in value_components:
+            if 'Nodeone' in component:
+                node_one = component.split(':')[1]
+            elif 'Nodetwo' in component:
+                node_two = component.split(':')[1]
+            elif 'Centralhub' in component:
+                central_hub = component.split(':')[1]
 
     node_status = [
         {'name': 'NODE ONE', 'status': node_one},
@@ -152,6 +157,7 @@ def getting_node_info():
     ]
 
     return node_status
+
 
 
 def generate_node_status_content():
@@ -178,11 +184,11 @@ def fetch_latest_fire_severity():
 
 
 previous_status = None
-
+alert_triggered_for_current_danger_status = False
 
 def determine_badge_properties_based_on_severity():
-    global previous_status
-    fire_severity = fetch_latest_fire_severity()
+    global previous_status, alert_triggered_for_current_danger_status
+    fire_severity = fetch_latest_fire_severity()  # Assuming this function fetches the latest fire severity
 
     if fire_severity > 80:
         current_status = "Danger"
@@ -192,8 +198,14 @@ def determine_badge_properties_based_on_severity():
         current_status = "Safe"
 
     trigger_alert = False
-    if current_status == "Danger" and previous_status != "Danger":
+    # Trigger an alert only if we transition to "Danger" from a different status,
+    # and ensure we haven't already triggered an alert for this "Danger" status.
+    if current_status == "Danger" and (previous_status != "Danger" or not alert_triggered_for_current_danger_status):
         trigger_alert = True
+        alert_triggered_for_current_danger_status = True  # Mark that we've triggered an alert for this "Danger" status
+    elif current_status != "Danger":
+        # Reset the flag if we move out of "Danger", allowing for future alerts if we return to "Danger".
+        alert_triggered_for_current_danger_status = False
 
     previous_status = current_status
 
