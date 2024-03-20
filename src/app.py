@@ -8,7 +8,7 @@ import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import ThemeSwitchAIO
 import plotly.graph_objs as go
 import pytz
-
+import pandas as pd
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -44,13 +44,14 @@ def update_table(n):
         angle = value_components[3].split(':')[1]
         fire_severity = value_components[4].split(':')[1]
 
-        table_data.append({
-            'timestamp': timestamp_with_suffix,
-            'average temperature (°C)': avg_temperature,
-            'compass': compass,
-            'angle (°)': angle,
-            'fire severity (%)': fire_severity
-        })
+        if timestamp.date() == datetime.datetime.now().date():
+            table_data.append({
+                'timestamp': timestamp_with_suffix,
+                'average temperature (°C)': avg_temperature,
+                'compass': compass,
+                'angle (°)': angle,
+                'fire severity (%)': fire_severity
+            })
 
     return table_data
 
@@ -79,15 +80,16 @@ def update_fire_severity_graph(n):
     for key, entry in data_graph.items():
         value_components = entry['value'].split(', ')
         timestamp = datetime.datetime.fromtimestamp(entry['timestamp'], tz=pytz.timezone('America/New_York'))
-        avg_temperature_str = value_components[2].split(':')[1]
-        fire_severity_str = value_components[4].split(':')[1]
+        if timestamp.date() == datetime.datetime.now().date():
+            avg_temperature_str = value_components[2].split(':')[1]
+            fire_severity_str = value_components[4].split(':')[1]
 
-        avg_temperature = parse_temperature(avg_temperature_str)
-        fire_severity = float(fire_severity_str.replace('%', '').strip())
+            avg_temperature = parse_temperature(avg_temperature_str)
+            fire_severity = float(fire_severity_str.replace('%', '').strip())
 
-        timestamps.append(timestamp)
-        avg_temperatures.append(avg_temperature)
-        fire_severities.append(fire_severity)
+            timestamps.append(timestamp.strftime('%I:%M:%S %p'))
+            avg_temperatures.append(avg_temperature)
+            fire_severities.append(fire_severity)
 
     fig = go.Figure(layout_template='plotly_dark')
 
@@ -106,7 +108,7 @@ def update_fire_severity_graph(n):
             overlaying='y',
             side='right'
         ),
-        xaxis_title='Time'
+        xaxis_title='Time',
     )
 
     return fig
@@ -159,7 +161,6 @@ def getting_node_info():
     return node_status
 
 
-
 def generate_node_status_content():
     return html.Ul([
         html.Li([
@@ -167,6 +168,15 @@ def generate_node_status_content():
             dbc.Badge("ON", color="success") if node['status'] == ' 1' else dbc.Badge("OFF", color="danger")
         ]) for node in getting_node_info()
     ], style={'list-style-type': 'none', 'text-align': 'center'})
+
+
+@app.callback(
+    Output('node-status-display', 'children'),  # Target the component that displays node status
+    Input('update-interval', 'n_intervals')  # Assuming you have an Interval component that triggers updates
+)
+def update_node_status(n):
+    # No need to pass 'n' if it's not used in the function, it's just there to trigger the callback
+    return generate_node_status_content()
 
 
 def parse_severity(sev_str):
@@ -185,6 +195,7 @@ def fetch_latest_fire_severity():
 
 previous_status = None
 alert_triggered_for_current_danger_status = False
+
 
 def determine_badge_properties_based_on_severity():
     global previous_status, alert_triggered_for_current_danger_status
@@ -262,8 +273,21 @@ columnDefs = [
 
 def generate_table():
     return html.Ul([
-        dbc.Button("Download Data", id="csv-button", n_clicks=0,
-                   style={'position': 'absolute', 'top': '250px', 'left': '10px'}),
+        dbc.Button(
+            children=[
+                html.I(className="fas fa-download mr-2"),  # using Font Awesome icons
+                "Download Data"
+            ],
+            id="csv-button",
+            n_clicks=0,
+            color="info",
+            className="btn-block",
+            style={
+                'position': 'absolute',
+                'top': '250px',
+                'left': '10px'
+            }
+        ),
         dag.AgGrid(
             id='table',
             columnDefs=columnDefs,
@@ -301,11 +325,47 @@ def latest_info():
     ])
 
 
+@app.callback(
+    Output("download-csv", "data"),
+    [Input("download-btn", "n_clicks")],
+    [State("date-picker-single", "date")]
+)
+def download_logged_history(n_clicks, selected_date):
+    if n_clicks > 0:
+        data = firebase.get('/lora_data', None)
+        rows = []
+
+        selected_date_dt = datetime.datetime.strptime(selected_date, '%Y-%m-%d')
+
+        for key, entry in data.items():
+            value_components = entry['value'].split(', ')
+            timestamp = entry['timestamp']
+            entry_datetime = datetime.datetime.fromtimestamp(timestamp, tz=pytz.timezone('America/New_York'))
+
+            if entry_datetime.date() == selected_date_dt.date():  # Filter for the selected date
+                avg_temperature = parse_temperature(value_components[2].split(':')[1])
+                compass = value_components[1].split(':')[1]
+                angle = value_components[3].split(':')[1]
+                fire_severity = value_components[4].split(':')[1]
+
+                rows.append({
+                    'timestamp': entry_datetime.strftime('%Y-%m-%d %I:%M:%S %p'),
+                    'average temperature (°C)': avg_temperature,
+                    'compass': compass,
+                    'angle (°)': angle,
+                    'fire severity (%)': fire_severity
+                })
+
+        # Convert list of dictionaries to DataFrame and then to CSV
+        df = pd.DataFrame(rows)
+        return dcc.send_data_frame(df.to_csv, filename=f"logged_history_{selected_date}.csv")
+
+
 tab1_content = dbc.Card(
     dbc.CardBody(
         [
             html.H2("Overall System Status", style={'text-align': 'center'}),
-            generate_node_status_content(),
+            html.Div(id='node-status-display'),
             html.H2("Latest Information", className="card-title",
                     style={"width": "50%", "height": "500px", "position": "absolute", "top": "200px",
                            "right": "0px", 'text-align': 'center'}, ),
@@ -333,19 +393,46 @@ tab2_content = dbc.Card(
 )
 
 tab3_content = dbc.Card(
-    dbc.CardBody(
-        [
-            dbc.Button(
-                [
-                    "Notifications",
-                    dbc.Badge("4", color="red", text_color="white", className="ms-1", style={'font-size': '20'}),
-                ],
-                color="primary",
-            )
-
-        ]
-    ),
+    dbc.CardBody([
+        html.H4("Logged History", className="card-title", style={'textAlign': 'center'}),
+        html.P("Select a date to download the history of fire severity logs.", style={'textAlign': 'center'}),
+        dbc.Row(
+            dbc.Col(
+                dcc.DatePickerSingle(
+                    id='date-picker-single',
+                    min_date_allowed=datetime.date(2021, 1, 1),  # adjust based on your data
+                    max_date_allowed=datetime.date.today(),
+                    date=datetime.date.today(),
+                    display_format='YYYY-MM-DD',
+                    style={'margin': 'auto'}
+                ),
+                width=1,  # Adjusted for the date picker width
+                className='mb-3',  # Margin bottom for spacing
+                align='center'  # Align center for vertical alignment
+            ),
+            justify='center'  # Horizontally center the column in the row
+        ),
+        dbc.Row(
+            dbc.Col(
+                dbc.Button(
+                    children=[
+                        html.I(className="fas fa-download mr-2"),  # using Font Awesome icons
+                        "Download Logged History"
+                    ],
+                    id="download-btn",
+                    color="info",
+                    className="btn-block",
+                    n_clicks=0
+                ),
+                width=1,  # Adjusted for the button width
+                align='center'  # Align center for vertical alignment
+            ),
+            justify='center'  # Horizontally center the column in the row
+        ),
+        dcc.Download(id="download-csv")
+    ]),
     className="mt-3",
+    style={'box-shadow': '0px 0px 10px #aaa'}
 )
 
 test_png = './assets/Prienai_forest.png'
@@ -366,6 +453,8 @@ app.layout = html.Div([
             dbc.Tab(tab1_content, label="Main Hub", label_style={"color": 'Red'},
                     active_label_style={"color": "Green"}),
             dbc.Tab(tab2_content, label="Data Visualization", label_style={"color": 'Red'},
+                    active_label_style={"color": "Green"}),
+            dbc.Tab(tab3_content, label="Logged History", label_style={"color": 'Red'},
                     active_label_style={"color": "Green"}),
         ]
     ),
